@@ -1,0 +1,7 @@
+{
+  "name": "prism-code",
+  "productName": "Prism Code",
+  "version": "1.4.0",
+  "description": "Prism Code — learn Python by watching it run: values flow between variables, function calls slide in and out, files fill line by line. Exam-style problems, answer checking and a predict-the-output quiz. Works offline.",
+  "license": "MIT"
+}

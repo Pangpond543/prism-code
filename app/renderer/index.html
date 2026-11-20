@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>Prism Code</title>
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/code.css">
+<link rel="stylesheet" href="css/lib.css">
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="refract" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.006 0.011" numOctaves="2" seed="11" result="noise"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+      <feDisplacementMap in="blur" in2="noise" scale="70" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<div id="app">
+  <!-- ───────────── title bar (Prism suite shell) ───────────── -->
+  <header id="titlebar" class="glass refract">
+    <div class="brand tb-drag" data-tauri-drag-region>
+      <div class="prism-logo" data-tauri-drag-region><i></i><i></i><i></i></div>
+      <span class="brand-name" data-tauri-drag-region>Prism Code</span>
+    </div>
+    <div id="crumbs" class="crumbs" data-tauri-drag-region></div>
+    <div class="tb-drag tb-fill" data-tauri-drag-region></div>
+    <div class="tb-actions">
+      <span class="py-status" id="py-status" title="Python ในโปรแกรม (ทำงานในเครื่อง ไม่ใช้เน็ต)"><i></i><span>กำลังเตรียม Python…</span></span>
+      <div class="lang-switch" id="lang-switch" title="ภาษา / Language"><i></i><button data-lang="th">TH</button><button data-lang="en">EN</button></div>
+      <button class="icon-btn" id="btn-theme" title="โหมดมืด / สว่าง"><span data-icon="moon"></span></button>
+      <button class="icon-btn" id="btn-info" title="เกี่ยวกับ Prism Code"><span data-icon="info"></span></button>
+      <div class="win-btns">
+        <button id="win-min" title="ย่อ"><span data-icon="min"></span></button>
+        <button id="win-max" title="ขยาย"><span data-icon="max"></span></button>
+        <button id="win-close" class="danger" title="ปิด"><span data-icon="x"></span></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ───────────── dock ───────────── -->
+  <nav id="dock-wrap"><div id="dock" class="glass refract">
+    <button class="dock-btn active" data-view="code"><span data-icon="code"></span><em>เขียนโค้ด</em></button>
+    <button class="dock-btn" data-view="library"><span data-icon="book"></span><em>โจทย์ / คลัง</em></button>
+    <button class="dock-btn" data-view="quiz"><span data-icon="bulb"></span><em>ทายก่อนรัน</em></button>
+    <button class="dock-btn" data-view="keys"><span data-icon="keyboard"></span><em>คีย์ลัด (F1)</em></button>
+    <i class="dock-sep"></i>
+    <button class="dock-btn" id="dock-open"><span data-icon="open"></span><em>เปิดไฟล์ .py / .ipynb (Ctrl+O)</em></button>
+  </div></nav>
+
+  <main id="stage">
+    <!-- ───────────── workspace ───────────── -->
+    <section id="view-code" class="view active">
+      <div class="ws" id="ws">
+        <aside id="prob" class="glass prob">
+          <div class="prob-head">
+            <div class="prob-title"><small id="prob-pack"></small><b id="prob-name"></b></div>
+            <button class="icon-btn" id="prob-hide" title="ซ่อนโจทย์ (Ctrl+B)"><span data-icon="chev"></span></button>
+          </div>
+          <div class="prob-body" id="prob-body"></div>
+          <div class="prob-foot" id="prob-foot"></div>
+        </aside>
+        <button id="prob-show" class="glass prob-show hidden" title="แสดงโจทย์ (Ctrl+B)"><span data-icon="book"></span><em>โจทย์</em></button>
+
+        <section class="ed-col" id="ed-col">
+          <div class="ed-tabs" id="ed-tabs"></div>
+          <div class="ed-bar">
+            <button class="run-btn" id="btn-run" title="รันโปรแกรม (F5)"><span data-icon="play"></span><span>รัน</span><kbd>F5</kbd></button>
+            <button class="run-btn alt" id="btn-viz" title="รันแล้วดูการทำงานทีละขั้น (F6)"><span data-icon="anim"></span><span>ดูทีละขั้น</span><kbd>F6</kbd></button>
+            <button class="run-btn check" id="btn-check" title="ตรวจคำตอบกับเคสทดสอบทั้งหมด (Ctrl+Enter)"><span data-icon="check"></span><span>ตรวจคำตอบ</span><kbd>Ctrl+Enter</kbd></button>
+            <button class="run-btn stop hidden" id="btn-stop" title="หยุดโปรแกรม (Shift+F5)"><span data-icon="stop"></span><span>หยุด</span></button>
+            <button class="ed-toggle" id="btn-predict" title="ก่อนรัน ให้ทายก่อนว่าโปรแกรมจะแสดงอะไร"><span data-icon="brain"></span><span>ทายก่อนรัน</span></button>
+            <span class="ed-fill"></span>
+            <button class="ed-ico" id="btn-open" title="เปิดไฟล์ .py / .ipynb (Ctrl+O)"><span data-icon="open"></span></button>
+            <button class="ed-ico" id="btn-save" title="บันทึกเป็นไฟล์ .py (Ctrl+S)"><span data-icon="download"></span></button>
+            <button class="ed-ico" id="btn-font-" title="ตัวอักษรเล็กลง (Ctrl+-)"><span data-icon="minus"></span></button>
+            <span class="ed-size" id="font-size">15</span>
+            <button class="ed-ico" id="btn-font+" title="ตัวอักษรใหญ่ขึ้น (Ctrl+=)"><span data-icon="plus"></span></button>
+            <button class="ed-ico" id="btn-right" title="ซ่อน / แสดงแผงสรุปค่าด้านขวา (Ctrl+J)"><span data-icon="layers"></span></button>
+            <button class="ed-ico" id="btn-wide" title="ขยายช่องเขียนโค้ด (Ctrl+Alt+B)"><span data-icon="fit"></span></button>
+          </div>
+          <div class="vz-bar dark" id="vz-bar">
+            <button class="icon-btn" id="vz-first" title="กลับไปขั้นแรก (Home)"><span data-icon="first"></span></button>
+            <button class="icon-btn" id="vz-prev" title="ย้อนกลับ 1 ขั้น (Shift+F10 / ←)"><span data-icon="kprev"></span></button>
+            <button class="vz-play" id="vz-play" title="เล่น / หยุด (Space)"><span data-icon="play"></span></button>
+            <button class="icon-btn" id="vz-next" title="ไปขั้นถัดไป (F10 / →)"><span data-icon="knext"></span></button>
+            <button class="icon-btn" id="vz-last" title="ไปขั้นสุดท้าย (End)"><span data-icon="last"></span></button>
+            <input type="range" class="range vz-slider" id="vz-slider" min="0" max="0" value="0">
+            <span class="vz-count" id="vz-count">0 / 0</span>
+            <label class="vz-speed" title="ความเร็ว"><span data-icon="clock"></span><select id="vz-speed"><option value="0.35">0.35×</option><option value="0.6">0.6×</option><option value="1" selected>1×</option><option value="1.6">1.6×</option><option value="2.5">2.5×</option><option value="4">4×</option></select></label>
+            <button class="ed-toggle on" id="btn-spot" title="หรี่บรรทัดอื่น ให้เห็นบรรทัดที่กำลังทำชัดๆ"><span data-icon="focus"></span><span>สปอตไลต์</span></button>
+          </div>
+          <div class="vz-narr dark" id="vz-narr"></div>
+          <div class="ed-wrap" id="ed-wrap"><div id="editor"></div></div>
+          <div class="hsplit" id="hsplit" title="ลากเพื่อปรับขนาด"></div>
+          <div class="console" id="console">
+            <div class="con-head"><span class="con-tab">TERMINAL</span><span class="con-state" id="con-state"></span><span class="ed-fill"></span>
+              <button class="ed-ico" id="con-clear" title="ล้างหน้าจอ"><span data-icon="trash"></span></button></div>
+            <div class="con-out" id="console-out"></div>
+          </div>
+        </section>
+
+        <div class="vsplit" id="vsplit" title="ลากเพื่อปรับขนาด"></div>
+
+        <section id="right" class="glass right">
+          <div class="tabs r-tabs" id="r-tabs">
+            <button class="tab active" data-r="viz"><span data-icon="anim"></span><span>สรุปค่า</span></button>
+            <button class="tab" data-r="files"><span data-icon="folder"></span><span>ไฟล์</span><b class="r-badge" id="files-count"></b></button>
+            <button class="tab" data-r="check"><span data-icon="check"></span><span>ตรวจคำตอบ</span><b class="r-badge" id="check-badge"></b></button>
+            <button class="tab" data-r="lib" title="คลังไฟล์ .py ของคุณ (Ctrl+Shift+E)"><span data-icon="box"></span><span>คลัง</span><b class="r-badge" id="lib-count"></b></button>
+          </div>
+          <div class="r-pane on" id="r-viz">
+            <div class="vz" id="vz"></div>
+          </div>
+          <div class="r-pane" id="r-files"></div>
+          <div class="r-pane" id="r-check"></div>
+          <div class="r-pane" id="r-lib"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ───────────── library ───────────── -->
+    <section id="view-library" class="view scroll-view"><div class="page">
+      <div class="page-head"><div><h2>โจทย์ / คลัง</h2><p class="muted" id="lib-sub">เลือกโจทย์มาทำ · สร้างโจทย์ใหม่ · หรือเปิดไฟล์ .ipynb ของคุณเอง</p></div>
+        <div class="head-tools"><div class="tabs" id="lib-tabs"><button class="tab active" data-lt="prob"><span data-icon="book"></span><span>โจทย์</span></button><button class="tab" data-lt="files"><span data-icon="box"></span><span>คลัง</span><b class="r-badge" id="lib-count2"></b></button></div><button class="pill-btn" id="lib-open"><span data-icon="open"></span><span>เปิดไฟล์ .ipynb / .py</span></button></div></div>
+      <div id="lib"></div>
+      <div id="lib-files" class="lib-files hidden"></div>
+    </div></section>
+
+    <!-- ───────────── predict quiz ───────────── -->
+    <section id="view-quiz" class="view scroll-view"><div class="page">
+      <div class="page-head"><div><h2>ทายก่อนรัน</h2><p class="muted">อ่านโค้ดแล้วทายว่าจะแสดงอะไรออกหน้าจอ — ฝึกแบบนี้บ่อยๆ จะอ่านโค้ดคล่องขึ้นมาก</p></div>
+        <div class="head-tools" id="quiz-score"></div></div>
+      <div class="chip-row" id="quiz-topics"></div>
+      <div class="quiz glass card" id="quiz"></div>
+    </div></section>
+
+    <!-- ───────────── shortcuts ───────────── -->
+    <section id="view-keys" class="view scroll-view"><div class="page">
+      <div class="page-head"><div><h2>คีย์ลัด</h2><p class="muted">ส่วนใหญ่ตรงกับ VS Code — ใช้ที่นี่คล่อง ไปสอบก็คล่อง</p></div></div>
+      <div class="grid g-2" id="keys"></div>
+    </div></section>
+  </main>
+</div>
+
+<div id="tooltip" class="glass tip hidden"></div>
+<div id="ctx" class="glass ctx hidden"></div>
+<div id="toasts"></div>
+<div id="modal" class="overlay hidden"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
