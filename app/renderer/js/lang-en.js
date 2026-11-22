@@ -1,6 +1,10 @@
 // English for Prism Code. Keys are the Thai source text; "{}" = a value filled in at run time.
 // Problem statements (BU Final, generated problems, imported notebooks) stay in their own language.
 export const EN = {
+  "มีเวอร์ชันใหม่ v{}": "New version v{}",
+  "(ตอนนี้ v{})": "(you have v{})",
+  "อัปเดต": "Update",
+  "มีเวอร์ชันใหม่ v{} — กดเพื่ออัปเดต": "New version v{} — click to update",
   /* ── shell / about / update ── */
   "เวอร์ชัน": "Version", "ผู้พัฒนา": "Author", "โมเดล AI ที่สร้าง": "Built with AI model",
   "<span class=\"muted\">ยังไม่ได้ตั้งค่าลิงก์</span>": "<span class=\"muted\">Link not set yet</span>",
@@ -20,6 +24,14 @@ export const EN = {
   "เป็นเวอร์ชันล่าสุดอยู่แล้ว (v{})": "You are on the latest version (v{})", "มีเวอร์ชันใหม่ v{} (ตอนนี้ใช้ v{})": "Version v{} is available (you have v{})", "อัปเดตเลย": "Update now",
   "ตกลง": "OK", "ยืนยัน": "Confirm", "ยกเลิก": "Cancel",
   "ภาษา / Language": "Language", "โหมดมืด / สว่าง": "Dark / light mode", "เกี่ยวกับ Prism Code": "About Prism Code", "ย่อ": "Minimize", "ขยาย": "Maximize",
+  "หน้าตาโปรแกรม: สว่าง / มืด · แก้ว / คลาสสิก": "Appearance: light / dark · glass / classic",
+  "ธีม": "Theme",
+  "สว่าง": "Light",
+  "มืด": "Dark",
+  "สไตล์": "Style",
+  "แก้ว": "Glass",
+  "คลาสสิก": "Classic",
+  "คลาสสิก: พื้นเรียบ ไม่มีแสงหักเหหรือแอนิเมชัน ใช้เครื่องน้อยกว่า": "Classic: plain background, no refraction or animation, lighter on your PC",
   "กำลังเตรียม Python…": "Preparing Python…", "Python ในโปรแกรม (ทำงานในเครื่อง ไม่ใช้เน็ต)": "Built-in Python (runs on your PC, no internet)",
   "Python พร้อมแล้ว (โหลด {} ms) — ทำงานในเครื่อง ไม่ใช้เน็ต": "Python is ready (loaded in {} ms) — runs on your PC, no internet", "Python โหลดไม่สำเร็จ": "Python failed to load",
 
@@ -61,6 +73,7 @@ export const EN = {
   "[โปรแกรมรอค่าจาก input() — ยังไม่ได้ใส่ค่า]": "[The program is waiting for input() — no value given]", "มีข้อผิดพลาด": "Error", "[หยุดโปรแกรมแล้ว]": "[Stopped]",
   "[จบโปรแกรม · {} ขั้น · {} ms]": "[Finished · {} steps · {} ms]", "[ลืม close() ไฟล์: {} — Python ปิดให้ตอนจบ แต่ตอนสอบควรปิดเอง]": "[Forgot close() on: {} — Python closes it at the end, but close it yourself in the exam]",
   "[ภาพทีละขั้นแสดงเฉพาะ {} ขั้นแรก]": "[Step-by-step shows only the first {} steps]",
+  "[ข้อความที่แสดงยาวเกิน 200,000 ตัวอักษร — ตัดส่วนที่เหลือทิ้ง]": "[The output is longer than 200,000 characters — the rest was cut]",
 
   /* ── predict ── */
   "โหมดทายก่อนรัน: ใส่ค่าที่โปรแกรมถามก่อน ผลลัพธ์จะถูกซ่อนไว้": "Predict mode: answer the program's questions first — the output stays hidden",

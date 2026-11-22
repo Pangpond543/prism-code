@@ -238,6 +238,40 @@ fn single_instance() -> bool {
     true
 }
 
+/* ------------------------------------------------------------ white-page recovery */
+/// If the page's process crashes or hangs (out of memory, GPU driver reset…) WebView2 leaves the window white for
+/// good. Log what happened and reload the page; if the whole WebView2 is gone, restart the app. Work is saved
+/// to localStorage 0.4 s after every change, so a reload loses at most the last keystrokes.
+fn watch_page(w: &WebviewWindow) {
+    let _ = w.with_webview(|wv| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::*;
+        let Ok(core) = wv.controller().CoreWebView2() else { return };
+        let handler = webview2_com::ProcessFailedEventHandler::create(Box::new(|sender, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
+            args.ProcessFailedKind(&mut kind)?;
+            let name = match kind {
+                COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED => "browser exited",
+                COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED => "page exited",
+                COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE => "page not responding",
+                COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED => "gpu exited",
+                _ => "other",
+            };
+            static COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let n = COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            log(&format!("WEBVIEW FAILED: {name} (#{n})"));
+            if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED {
+                if let Some(a) = APP.get() { a.restart(); }
+            } else if (kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE) && n <= 5 {
+                if let Some(s) = sender { let _ = s.Reload(); } // after 5 tries in one session leave it (and the log) alone
+            }
+            Ok(())
+        }));
+        let mut token = Default::default();
+        let _ = core.add_ProcessFailed(&handler, &mut token);
+    });
+}
+
 fn main() {
     if std::env::var("PRISM_MULTI").is_err() && !single_instance() { return; }
     std::panic::set_hook(Box::new(|i| log(&format!("PANIC {i}"))));
@@ -254,6 +288,7 @@ fn main() {
         ])
         .setup(|app| {
             let _ = APP.set(app.handle().clone());
+            if let Some(w) = app.get_webview_window("main") { watch_page(&w); }
             // the window shows itself when the page is ready; never stay invisible if the page fails
             std::thread::spawn(|| { std::thread::sleep(std::time::Duration::from_secs(6)); if let Some(w) = main_win() { if !w.is_visible().unwrap_or(true) { log("page not ready after 6 s — showing window"); let _ = w.show(); } } });
             Ok(())

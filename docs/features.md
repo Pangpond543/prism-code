@@ -70,6 +70,9 @@
   editor or watch step by step.
 
 ## Shell
-- Prism suite shell: title bar, TH / EN, dark mode, About + GitHub updater (repo not set yet), shortcuts page (F1).
+- Light on the PC: after 8 s without mouse / keyboard, or when another window is in front, the moving background
+  and the decorative shimmer stop (a running step-by-step keeps playing); the first mouse move wakes them.
+- If the page crashes or hangs (white window), it reloads itself; the work is already saved.
+- Prism suite shell: title bar, TH / EN, appearance menu on the moon/sun button (Light/Dark + Glass/Classic; Classic = flat, still, no refraction), About + GitHub updater (repo not set yet), shortcuts page (F1).
 - Python status in the title bar (Pyodide 3.14, loads in ~2 s, fully offline). Endless loops stop after 1.5 M lines or
   12 s; Shift+F5 stops at any time.

@@ -1,7 +1,7 @@
 // Prism Code — learn Python by watching it run. Main window: Prism suite shell, the VS Code-style editor + console,
 // the step-by-step stage, files, answer checking, the problem library (BU Final, generated, imported .ipynb) and
 // the "predict before you run" quiz. Python itself runs offline in a worker (runner.js → py-worker.js → tracer.py).
-import { api, native, T, lang, theme, setTheme, savedTheme, remember, recall, toast, htmlBox, confirmBox, promptBox, hideCtx, esc, $, bus } from './core.js';
+import { api, native, T, lang, theme, setTheme, savedTheme, setLook, savedLook, remember, recall, toast, htmlBox, confirmBox, promptBox, hideCtx, esc, $, bus } from './core.js';
 import { icon, hydrateIcons } from './icons.js';
 import { translateDom, tr } from './i18n.js';
 import { startBackground } from './bg.js';
@@ -29,7 +29,7 @@ async function showInfo() {
   const link = info.repo ? `https://github.com/${info.repo}` : '';
   htmlBox(`
     <div class="about">
-      <div class="prism-logo big"><i></i><i></i><i></i></div>
+      <div class="prism-logo big"><i></i><i></i><i></i><b class="lg"><svg viewBox="18 18 64 64" aria-hidden="true"><path d="M36 34 L22 50 L36 66 M64 34 L78 50 L64 66" fill="none" stroke="#fff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M56 28 L44 72" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg></b></div>
       <h3>Prism Code <small>v${esc(info.version)}</small></h3>
       <p class="about-purpose">${esc(PURPOSE)}</p>
       <dl class="kv">
@@ -91,7 +91,17 @@ const S = (() => {
 })();
 let saveT = 0;
 const save = () => { clearTimeout(saveT); saveT = setTimeout(saveNow, 400); };
-function saveNow() { clearTimeout(saveT); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { toast(T`บันทึกงานในเครื่องไม่สำเร็จ (พื้นที่เต็ม?)`, { kind: 'err' }); } }
+// The page's storage holds ~5 M characters. A data file a program wrote (or one loaded beside a .py) can be huge:
+// such files stay for this session but are not saved, so the code itself always fits.
+const BIG_FILE = 300000;
+const keepSmall = (k, v) => ((k === 'files' || k === 'origFiles') && v && typeof v === 'object' && !Array.isArray(v)
+  ? Object.fromEntries(Object.entries(v).filter(([, t]) => typeof t !== 'string' || t.length <= BIG_FILE)) : v);
+let saveErrAt = 0;
+function saveNow() {
+  clearTimeout(saveT);
+  try { localStorage.setItem(KEY, JSON.stringify(S, keepSmall)); }
+  catch { if (Date.now() - saveErrAt > 30000) { saveErrAt = Date.now(); toast(T`บันทึกงานในเครื่องไม่สำเร็จ (พื้นที่เต็ม?)`, { kind: 'err' }); } }
+}
 addEventListener('beforeunload', saveNow);
 
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
@@ -361,7 +371,7 @@ function tracebackText(err, fileName) {
   if (err.type === 'SyntaxError' || err.type === 'IndentationError' || err.type === 'TabError') return (err.text || '').replace(/<prism>/g, fileName) + '\n';
   if (['TooManySteps', 'TooSlow', 'Stopped', 'Internal'].includes(err.type)) return '';
   let s = 'Traceback (most recent call last):\n';
-  for (const f of err.tb || []) s += `  File "${fileName}", line ${f.ln}, in ${f.fn}\n    ${f.src}\n`;
+  for (const f of err.tb || []) s += f.more ? `  [Previous line repeated ${f.more} more times]\n` : `  File "${fileName}", line ${f.ln}, in ${f.fn}\n    ${f.src}\n`;
   return s + (err.text || `${err.type}: ${err.msg}`) + '\n';
 }
 function errorCard(err, code) {
@@ -428,6 +438,7 @@ function showResult(run, { play = false } = {}) {
     tail += `<span class="c-sys">${esc(T`[จบโปรแกรม · ${res.count || 0} ขั้น · ${res.ms || 0} ms]`)}</span>\n`;
     if ((res.unclosed || []).length) tail += `<span class="c-sys">${esc(T`[ลืม close() ไฟล์: ${res.unclosed.join(', ')} — Python ปิดให้ตอนจบ แต่ตอนสอบควรปิดเอง]`)}</span>\n`;
   }
+  if (res.outCut) tail += `<span class="c-sys">${esc(T`[ข้อความที่แสดงยาวเกิน 200,000 ตัวอักษร — ตัดส่วนที่เหลือทิ้ง]`)}</span>\n`;
   if (res.truncated) tail += `<span class="c-sys">${esc(T`[ภาพทีละขั้นแสดงเฉพาะ ${res.steps.length} ขั้นแรก]`)}</span>\n`;
   conTail = tail;
   setConsole(res.out || [], { tail: true });
@@ -647,7 +658,16 @@ async function openPath(path) {
   if (/\.py$/i.test(path) || /\.ipynb$/i.test(path)) {
     const dir = path.replace(/[\\/][^\\/]*$/, '');
     const list = (await api.invoke('fs:list', dir)) || [];
-    for (const f of list.slice(0, 30)) { const t = await api.invoke('fs:read', f.path); if (t && t.ok) side[f.name] = t.text; }
+    // files the code names (open("data.txt")) come first; other small ones only up to a budget — a Downloads
+    // folder full of big .txt files must not fill the saved data
+    const named = list.filter((f) => r.text.includes(f.name));
+    const rest = list.filter((f) => !r.text.includes(f.name) && f.size <= 64 * 1024);
+    let budget = 1000000;
+    for (const f of [...named, ...rest].slice(0, 30)) {
+      if (f.size > budget) continue;
+      const t = await api.invoke('fs:read', f.path);
+      if (t && t.ok) { side[f.name] = t.text; budget -= f.size; }
+    }
   }
   await openText(r.name, r.text, path, side);
 }
@@ -992,6 +1012,7 @@ async function boot() {
   api.invoke('app:lang', lang); // native file dialogs follow the page language
   translateDom(document.body);
   hydrateIcons();
+  setLook(savedLook());
   setTheme(savedTheme());
   startBackground($('bg'));
   $('win-min').onclick = () => api.invoke('win:min');
@@ -999,7 +1020,22 @@ async function boot() {
   $('win-close').onclick = () => { saveNow(); if (native) api.invoke('win:close'); else window.close(); };
   $('btn-info').onclick = showInfo;
   const themeIcon = () => { $('btn-theme').firstElementChild.innerHTML = icon(theme.dark ? 'day' : 'moon'); };
-  $('btn-theme').onclick = () => { setTheme(!theme.dark); themeIcon(); };
+  // appearance menu under the moon/sun: theme (light / dark) + style (glass / classic) — suite shell, same as Prism Size
+  {
+    const pop = $('theme-pop'), tbtn = $('btn-theme'), isOpen = () => !pop.classList.contains('hidden');
+    const sync = () => {
+      pop.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', (b.dataset.mode === 'dark') === theme.dark));
+      pop.querySelectorAll('[data-look]').forEach((b) => b.classList.toggle('on', (b.dataset.look === 'classic') === theme.classic));
+    };
+    const place = () => { const r = tbtn.getBoundingClientRect(), w = pop.offsetWidth; pop.style.left = Math.max(8, Math.min(r.right - w + 8, innerWidth - w - 8)) + 'px'; pop.style.top = r.bottom + 12 + 'px'; };
+    const close = () => { pop.classList.add('hidden'); tbtn.classList.remove('open'); };
+    tbtn.onclick = () => { if (isOpen()) { close(); return; } hideCtx(); sync(); pop.classList.remove('hidden'); tbtn.classList.add('open'); place(); };
+    pop.querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => { const d = b.dataset.mode === 'dark'; setTheme(d); themeIcon(); sync(); }; });
+    pop.querySelectorAll('[data-look]').forEach((b) => { b.onclick = () => { setLook(b.dataset.look === 'classic'); sync(); }; });
+    addEventListener('pointerdown', (e) => { if (isOpen() && !pop.contains(e.target) && !tbtn.contains(e.target)) close(); }, true);
+    addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) { e.stopPropagation(); close(); } }, true);
+    addEventListener('resize', () => { if (isOpen()) place(); }); // snap / maximise: follow the button
+  }
   themeIcon();
   const ls = $('lang-switch');
   ls.dataset.lang = lang;
@@ -1123,7 +1159,14 @@ async function boot() {
     api.invoke('app:log', 'test act ' + a);
     if (cmd === 'en' || cmd === 'th') { if (lang !== cmd) { remember('prism.lang', cmd); location.reload(); return; } }
     else if (cmd === 'dark' || cmd === 'light') { setTheme(cmd === 'dark'); themeIcon(); }
+    else if (cmd === 'themepop' || cmd === 'classic' || cmd === 'glass') { // full press sequence, so the close-on-outside-press listener runs too
+      const press = (el) => { el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); el.click(); };
+      if (cmd === 'themepop') press($('btn-theme'));
+      else if (!$('theme-pop').classList.contains('hidden')) press(document.querySelector(`#theme-pop [data-look=${cmd}]`));
+      else setLook(cmd === 'classic');
+    }
     else if (cmd === 'info') showInfo();
+    else if (cmd === 'updfake') window.__prismUpdFake = true;
     else if (cmd === 'view') showView(arg);
     else if (cmd === 'open') openProblem(BU_FINAL.id, arg);
     else if (cmd === 'buggy') openProblem(BU_FINAL.id, arg, 'buggy:0');
@@ -1156,3 +1199,47 @@ async function boot() {
   }
 }
 boot();
+
+/* >>> prism-update-nudge (tools/brand/apply-web.js) */
+{
+  // Checks GitHub quietly a few seconds after start (and every 6 h). New version → dot on Info + a chip that slides out
+  // once per version; clicking either opens Info already showing "Update now".
+  const btn = document.getElementById('btn-info'), SEEN = 'prism.updSeen';
+  let found = null;
+  const chipOut = (r) => {
+    let seen = null; try { seen = localStorage.getItem(SEEN); } catch {}
+    if (seen === r.latest || document.querySelector('.upd-chip')) return;
+    const chip = document.createElement('button');
+    chip.className = 'upd-chip';
+    chip.innerHTML = `<i></i><span>${T`มีเวอร์ชันใหม่ v${esc(r.latest)}`}</span><u>${T`(ตอนนี้ v${esc(r.current)})`}</u><b>${T`อัปเดต`}</b>`;
+    document.body.appendChild(chip);
+    const place = () => { const b = btn.getBoundingClientRect(); chip.style.top = `${b.bottom + 10}px`; chip.style.right = `${Math.max(8, innerWidth - b.right - 6)}px`; };
+    place(); addEventListener('resize', place);
+    requestAnimationFrame(() => requestAnimationFrame(() => chip.classList.add('show')));
+    const hide = () => { chip.classList.remove('show'); removeEventListener('resize', place); setTimeout(() => chip.remove(), 450); };
+    chip.onclick = () => { hide(); btn.click(); };
+    setTimeout(hide, 10000);
+  };
+  const check = async () => {
+    let r; try { r = window.__prismUpdFake ? { ok: true, hasUpdate: true, latest: '9.9.9', current: '1.0.0' } : await api.invoke('update:check'); } catch { return; } // __prismUpdFake = test hook (PRISM_ACT updfake)
+    if (!r || !r.ok || !r.hasUpdate) return;
+    const fresh = !found || found.latest !== r.latest;
+    found = r;
+    btn.classList.add('has-update');
+    if (fresh) btn.classList.remove('seen');
+    btn.title = T`มีเวอร์ชันใหม่ v${r.latest} — กดเพื่ออัปเดต`;
+    chipOut(r);
+  };
+  setTimeout(check, 4000);
+  setInterval(check, 6 * 3600e3);
+  btn.addEventListener('click', () => {
+    if (!found) return;
+    try { localStorage.setItem(SEEN, found.latest); } catch {}
+    btn.classList.add('seen');
+    document.querySelector('.upd-chip')?.classList.remove('show');
+    const t0 = performance.now();
+    const go = () => { const c = document.getElementById('about-check'); if (c && !c.disabled && c.isConnected) c.click(); else if (performance.now() - t0 < 2500) requestAnimationFrame(go); };
+    requestAnimationFrame(go);
+  });
+}
+/* <<< prism-update-nudge */

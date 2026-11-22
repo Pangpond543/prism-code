@@ -1,5 +1,49 @@
 # Prism Code — changelog
 
+## 2026-11-23 — "the app freezes, the whole window goes white, and the PC gets slow while it's open" (a friend's report)
+- 🔴 **White window**: v1.4.0 sent the whole step recording to the page in one go. Measured with the old tracer:
+  infinite recursion = 75 MB, a 60×60 list changed in a loop = 220 MB (14 s). The page froze / ran out of memory
+  and WebView2 left the window white. Now ≤ ~10 MB (`SER_MAX` 400 000 values, `STACK_MAX` frames, see 2026-11-20).
+- 🔴 **White window never came back**: nothing handled a crashed / hung page. `main.rs watch_page()` listens to
+  WebView2 `ProcessFailed`: page exited / not responding → log `WEBVIEW FAILED: …` + reload (max 5 per session);
+  the whole WebView2 gone → restart the app. Tested: killed the page process of a test copy → reloaded in 0.5 s,
+  Python ready again, window normal (screenshot).
+- 🟠 **PC slow while the app is open**: idle (nothing happening) the app used ~1.3–1.8 CPU cores + ~18 % GPU: the
+  WebGL background at 24 fps and ~12 endless CSS loops (button shimmer, TH/EN switch, logo swing, status dot) — each
+  frame the glass panels re-blur what is behind them. Now `bg.js` goes idle after 8 s without mouse / keyboard or
+  when another window has focus: the background stops on its last picture and `html.idle` pauses those loops
+  (`code.css`). Measured idle: ~1–4 % CPU, 0 % GPU. Opening: ~1.2 cores for the first ~6 s (Python loading), then 0.
+  The step-by-step animation is not paused (checked: still playing 20 s after the last input). The logo swing
+  rests while idle (alone it cost ~1 core + 12 % GPU) and moves again with the first mouse move.
+- v1.5.0 also carries the appearance menu + Classic look, logo v2 and the update nudge (below). **Released as v1.5.0 on GitHub 2026-11-23** (Setup.exe + Portable.zip; notes TH + EN in `docs/release-notes-1.5.0.md`). Note: an earlier line here said "released" before it really was — `gh release list` is the proof.
+
+- 2026-11-23 — **Appearance menu + Classic look** (suite-wide, design approved on Prism Size). The moon/sun button opens a small menu: Theme (Light / Dark) and Style (Glass / Classic). Classic = flat solid panels on a plain background (Discord-like greys), no moving background, no refraction / blur / glints, no decorative looping animation or hover bounce; status indicators still move. — user wanted a calm, use-focused mode.
+- 2026-11-23 — Title-bar logo: outer square swings again (with the other two) and the glyph is ~25 % smaller. — user review.
+- 2026-11-22 — **Logo v2** (user review): app icon = the layered tile at every size (no plain small version) with a bigger glyph; title-bar logo = squares + glyph with no tile, 26 → 44 px, outer square still. — user wanted the big icon everywhere and a much bigger logo in the bar.
+- 2026-11-21 — **Own logo + "by 543" + update nudge** (suite-wide). Logo keeps the Prism family shape but now has this app's colour and a white </> glyph (title bar, About, exe/taskbar icon; generated from `tools/brand/`). Faint "by 543" after the name in the title bar (the user's personal mark). Quiet update check 4 s after start (+ every 6 h): newer version → pink dot with ripple on the Info button and a glass chip "New version vX · Update" sliding out once per version; clicking opens Info already on "Update now". Test hook: `updfake`. — user: logos all looked the same, wanted 543 visible, and an eye-catching update hint.
+
+## 2026-11-20 — bug hunt (rebuilt exe, still v1.4.0)
+- 🟠 `input()` inside a bare `except:` (very common: `try: int(input()) except: print("bad")`) never asked the user: the
+  `except:` swallowed our internal NeedInput signal and the program looped until the 1.5 M-step limit. `tracer.py` now
+  puts a guard call at the top of every `except` block (`guarded()`), so the signal always gets through.
+- 🟠 Opening a .py from a busy folder (e.g. Downloads) pulled up to 30 .txt files into the document and into the saved
+  data (one real doc had 640 KB; localStorage holds ~5 M chars → saving would start failing). Now files the code names
+  come first, others only if ≤ 64 KB, 1 MB total; files > 300 K chars are never saved (kept for the session);
+  the "cannot save" toast shows at most once per 30 s.
+- 🟠 `print("x" * 50_000_000)` sent the whole string to the page; output is cut at 200,000 chars with a note (`outCut`).
+- 🟠 Infinite recursion took 5–10 s to report and a huge traceback: steps keep only the global frame + 23 innermost
+  frames (`STACK_MAX`), traceback shows "[Previous line repeated N more times]", ~1 s now. A WebAssembly stack overflow
+  (after `sys.setrecursionlimit(100000)`) is reported as RecursionError and the worker is restarted (any `fail` restarts Python).
+- 🟠 A comprehension like `[[i*j for j in range(60)] for i in range(60)]` fired the same line thousands of times and
+  used the whole 2500-step budget on line 1 → repeated same-line events are merged; also a total value budget (`SER_MAX`).
+- Checked, no change needed: Thai identifiers / strings, recursion + exception steps, Stop / respawn, offline Pyodide
+  (embedded in exe), BU Final tests, 300 generated problems (sample == real output), clippy (4 style warnings only),
+  English entries for all new strings.
+- Mistake: my test hook `code:` overwrote the code of the user's real library file `gemini-code-….py` (the exe shares real
+  data). Restored from the file in Downloads. Use the browser preview for tests that edit code.
+- Not verified in the exe by eye: the Run button flow with the new tracer (checked in the browser preview + Node; the exe
+  boots, Python ready, exe timestamp = build).
+
 ## 2026-11-20 — first GitHub release (Pangpond543/prism-code)
 - `tools/release.sh` builds `Prism-Code-<ver>-Setup.exe` (NSIS, per-user, `tools/installer.nsi`) + `-Portable.zip`. In-app updater ported from Prism Cam (`update::apply_release`: installed → new Setup.exe run with `/S /RELAUNCH`; portable → zip unpacked over the folder, in-use files renamed `*.old`, cleaned at start). README (TH+EN), LICENSE (MIT), `.gitignore` added; `prism.config.json` repo set.
 - About box: "built with" model changed from Claude Fable 5.2 to **Claude Opus 5.5** (`app.js` `MODEL`). — user request.

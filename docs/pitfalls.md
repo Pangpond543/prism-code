@@ -38,3 +38,20 @@
 - **The exe uses the user's real saved data** (their library showed beside my test files). Data-creating test hooks need a matching cleanup (`libdel:<name>`); see suite LESSONS #5.
 - Rubber band: update the selection in pointermove, not only in requestAnimationFrame (a hidden preview pane never fires rAF); the frame loop is only for auto-scroll at an edge.
 - Library undo records a diff (folders + the touched files) in `record()`; a blank tab that `removeDoc` opens is ignored, fold state is kept when folders are restored.
+- **A bare `except:` catches our BaseException signals** (NeedInput / TooSlow / TooManySteps). `tracer.guarded()` inserts
+  `__prism_guard__()` first in every except body; keep it when changing how the code is compiled.
+- **Comprehensions fire a "line" event per item** → merged in `tracer()` (same line, same frame, no effects); `for` / `while`
+  headers are not merged.
+- **`ACT code:` edits the ACTIVE doc of the user's real data** — never use it in the exe without restoring the doc.
+- Saved data (`prism.code.v1`) skips `files` entries over 300 K chars; the page's storage limit is ~5 M chars total.
+
+- **Changed icon not in the exe** (2026-11-21): tauri-build does not rerun when `icons/icon.ico` changes → `touch app/src-tauri/build.rs` before building. Icons come from `../tools/brand` (see `../docs/brand.md`).
+- **Anything that animates under / inside the glass panels costs real CPU + GPU** (backdrop-filter re-blurs every
+  frame): idle Prism Code used 1.3–1.8 cores. Decorative endless animations must be in the `html.idle` list
+  (`code.css`); the WebGL background stops by itself (`bg.js` idle). Measure with `PrismCodeBuild	est\perf.ps1`
+  (CPU / memory / GPU of the app's process tree) after ~15 s without touching the mouse.
+- **Big results freeze the page** (structured clone + viz of 100+ MB) → white window. Keep the step recording small
+  (`SER_MAX`, `STACK_MAX`); `watch_page()` reloads a crashed / hung page and logs `WEBVIEW FAILED`.
+- **Test the exe with its own profile**: `WEBVIEW2_USER_DATA_FOLDER=%USERPROFILE%\PrismCodeBuild	est\wv2` + `PRISM_MULTI=1`
+  → hooks like `code:` can't touch the user's real library. Stop only your own copy by PID (never every prism-code.exe).
+- **Classic look (light) shows white-on-white boxes** → old light styles paint wells with translucent white over glass; on a solid white panel they vanish → add the class to the `html[data-look=classic]:not([data-theme=dark])` list at the end of this app's CSS (`var(--c-fill)` / `var(--c-hover)`). Test hooks must press `#theme-pop [data-look=…]`, never `[data-look=…]` (`<html>` carries the same attribute).

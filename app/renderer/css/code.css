@@ -502,3 +502,20 @@ html[data-theme=dark] kbd { background: rgba(255, 255, 255, .12); box-shadow: in
 .v-stripw .v-eol.strip { position: absolute; left: -2px; top: .45em; margin: 0; white-space: nowrap; z-index: 4; font-size: 12.5px; line-height: 1.6; background: #2e2617; box-shadow: inset 0 0 0 1px rgba(255, 198, 107, .45), 0 6px 16px -6px rgba(0, 0, 0, .7); }
 .cm-line.v-exec { position: relative; z-index: 2; }
 @keyframes labGo { 0% { box-shadow: 0 0 0 1px rgba(156, 220, 254, .45); } 35% { box-shadow: 0 0 0 2px #9cdcfe, 0 0 20px rgba(156, 220, 254, .9); } 100% { box-shadow: 0 0 0 1px rgba(156, 220, 254, .45); } }
+
+/* ── idle (bg.js: no input for 8 s or another window focused): pause the decorative loops. Each repaint of a
+   gradient under the glass panels forces a re-blur; left running they kept the CPU / GPU busy all the time.
+   The step-by-step animations are not in this list, so a playing run keeps moving. ── */
+html.idle .prism-logo i, html.idle .py-status i, html.idle .con-cursor, html.idle .vz-play, html.idle .vz-empty-state .orb,
+html.idle .pill-btn.primary, html.idle .dock-btn.active, html.idle .lang-switch i,
+html.idle .chip.on, html.idle .scan-orb b, html.idle .scan-orb i, html.idle .empty .big-ico, html.idle .progress i { animation-play-state: paused !important; }
+/* the title-bar logo swing (user asked for it) alone cost ~1 core + 12 % GPU while idle (the glass bar around it is
+   redrawn every frame) → it swings while the app is in use and rests when idle. The update-dot ripple keeps going. */
+
+/* classic look (base rules in style.css) — Prism Code extras */
+html[data-look=classic] .vz-play { animation: none; }
+html[data-look=classic] .drop-zone-all { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(242, 243, 245, .94); }
+html[data-look=classic][data-theme=dark] .drop-zone-all { background: rgba(30, 31, 34, .94); }
+/* light classic: wells that were white-on-glass get a visible grey on the solid white panels */
+html[data-look=classic]:not([data-theme=dark]) :is(.py-status, .vz-speed select, .vz-narr, .vz-var, .vz-cell, .chk-sum, .chk-row, kbd, .lib-files .lb-list) { background: var(--c-fill); box-shadow: inset 0 0 0 1px var(--c-line); }
+html[data-look=classic]:not([data-theme=dark]) :is(.file-row:hover:not(.on), .chk-row > button:hover, .lb-row:hover) { background: var(--c-hover); }

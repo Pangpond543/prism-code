@@ -94,7 +94,26 @@ export function startBackground(canvas) {
   init();
   tx = mx = canvas.width / 2; ty = my = canvas.height / 2;
   const t0 = performance.now();
+  // Idle = no mouse / keyboard for IDLE_MS, or another window has focus. Then the background stops on its last
+  // picture and <html class="idle"> pauses the decorative CSS loops: every frame the glass panels re-blur what
+  // is behind them, which kept ~1.5 CPU cores + the GPU busy while the app just sat open (friends' PCs felt slow).
+  const IDLE_MS = 8000;
+  let active = true, looping = false, idleT = 0;
+  const sleep = () => { active = false; document.documentElement.classList.add('idle'); };
+  const wake = () => {
+    clearTimeout(idleT); idleT = setTimeout(sleep, IDLE_MS);
+    if (active && looping) return;
+    active = true; document.documentElement.classList.remove('idle');
+    if (!looping) { looping = true; requestAnimationFrame(frame); }
+  };
+  for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel']) addEventListener(ev, wake, { passive: true, capture: true });
+  addEventListener('focus', wake);
+  addEventListener('blur', () => { clearTimeout(idleT); sleep(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && document.hasFocus()) wake(); });
+  let fadeUntil = 0; // keep drawing while idle until then (light / dark cross-fade)
   const frame = (now) => {
+    if (document.documentElement.dataset.look === 'classic') { looping = false; return; } // classic: canvas hidden, no GPU work
+    if (!active && now > fadeUntil) { looping = false; return; } // the canvas keeps its last picture
     requestAnimationFrame(frame);
     if (dead || document.hidden || !gl || gl.isContextLost() || now - last < 42) return;
     last = now;
@@ -106,5 +125,17 @@ export function startBackground(canvas) {
     gl.uniform1f(uDark, dark);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   };
-  requestAnimationFrame(frame);
+  // draw for a moment even while idle: the first picture (the app may start without focus), after a resize (a
+  // resized canvas is blank) and during the ~1 s light / dark cross-fade
+  const kick = (ms) => {
+    fadeUntil = Math.max(fadeUntil, performance.now() + ms);
+    if (!looping) { looping = true; requestAnimationFrame(frame); }
+  };
+  dark = document.documentElement.dataset.theme === 'dark' ? 1 : 0; // start on the right theme, no fade
+  wake();
+  kick(600);
+  if (!document.hasFocus()) sleep();
+  addEventListener('resize', () => { last = 0; kick(400); });
+  new MutationObserver(() => kick(1500)).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  new MutationObserver(() => { dark = document.documentElement.dataset.theme === 'dark' ? 1 : 0; kick(600); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-look'] }); // back from classic
 }

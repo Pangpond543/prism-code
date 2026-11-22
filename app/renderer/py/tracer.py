@@ -8,6 +8,10 @@ import sys, ast, json, builtins, io, os, time, random, types, traceback, shutil
 
 USER = "<prism>"
 WORK = "/work"
+OUT_MAX = 200000       # characters of program output kept
+SER_MAX = 400000       # values serialised for the step picture (~10 MB of JSON; a 60×60 list × 2500 steps was 220 MB → white page)
+STACK_MAX = 24        # call frames copied into each step
+TB_MAX = 12           # traceback frames kept (a RecursionError has ~1000)
 _real_open = builtins.open
 _real_input = builtins.input
 
@@ -159,6 +163,7 @@ def call_args(code, tree, line, fname):
 class Ser:
     def __init__(self):
         self.ids = {}
+        self.n = 0             # values serialised so far (a run with huge lists stops recording, not the PC)
 
     def oid(self, v):
         k = id(v)
@@ -168,6 +173,7 @@ class Ser:
 
     def __call__(self, v, depth=0):
         t = type(v)
+        self.n += 1
         try:
             if v is None:
                 return {"t": "None", "r": "None"}
@@ -299,6 +305,7 @@ class Run:
         self.max_secs = float(req.get("maxSecs", 12))
         self.out = []          # [kind, text, step]  kind: out | err | in
         self.out_len = 0
+        self.out_cut = False   # more than OUT_MAX characters printed: the rest is dropped (and the page says so)
         self.steps = []
         self.pending = []      # effects that happened since the last recorded step
         self.count = 0
@@ -321,8 +328,12 @@ class Run:
     def emit(self, kind, text):
         if not text:
             return
-        if self.out_len > 200000:
+        if self.out_len >= OUT_MAX:
+            self.out_cut = True
             return
+        if self.out_len + len(text) > OUT_MAX:   # one giant print("x" * 10**8) must not reach the page whole
+            text = text[: OUT_MAX - self.out_len]
+            self.out_cut = True
         self.out_len += len(text)
         if self.out and self.out[-1][0] == kind and self.out[-1][2] == len(self.steps):
             self.out[-1][1] += text
@@ -393,11 +404,14 @@ class Run:
         return out
 
     def record(self, ev, frame, extra=None):
-        if len(self.steps) >= self.max_rec:
+        if len(self.steps) >= self.max_rec or self.ser.n > SER_MAX:
             self.truncated = True
             return
         stack = []
-        for fr in self.stack:
+        frames = self.stack
+        if len(frames) > STACK_MAX:  # deep recursion: the global frame + the innermost calls (else every step copies 1000 frames)
+            frames = frames[:1] + frames[-(STACK_MAX - 1):]
+        for fr in frames:
             is_mod = fr.f_code.co_name == "<module>"
             stack.append({
                 "id": self.fid(fr),
@@ -443,6 +457,12 @@ class Run:
             if self.trace and len(self.steps) < self.max_rec:
                 extra = None
                 li = self.info.get(frame.f_lineno)
+                # a comprehension ([x * 2 for x in nums]) runs inline and fires the same line again for every item:
+                # one step is enough (a 60 × 60 grid would otherwise use the whole step budget on line 1)
+                last = self.steps[-1] if self.steps else None
+                if (last and not self.pending and last["ev"] == "line" and last["ln"] == frame.f_lineno
+                        and last["fid"] == self.fid(frame) and not (li and li.get("kind") in ("for", "while"))):
+                    return self.tracer
                 if li and li.get("kind") in ("if", "while") and li.get("safe"):
                     try:
                         val = eval(compile(li["test"], USER + "-test", "eval"), frame.f_globals, frame.f_locals)
@@ -484,6 +504,36 @@ class Run:
                     self.record("exc", frame, {"etype": et.__name__, "emsg": str(ev)})
             return self.tracer
         return self.tracer
+
+
+# ----------------------------------------------------------------------------- except guard
+# NeedInput / TooManySteps / TooSlow are BaseExceptions, but a bare "except:" (very common around int(input()))
+# still catches them: the program then loops "not a number" forever instead of asking. Every except block gets a
+# first call that lets our own signals through.
+GUARD = "__prism_guard__"
+
+
+def _guard():
+    e = sys.exc_info()[1]
+    if isinstance(e, (NeedInput, TooManySteps, TooSlow)):
+        raise e
+
+
+class _Guarder(ast.NodeTransformer):
+    def visit_ExceptHandler(self, node):
+        self.generic_visit(node)
+        if node.body:
+            first = node.body[0]
+            loc = dict(lineno=first.lineno, col_offset=first.col_offset, end_lineno=first.lineno, end_col_offset=first.col_offset)
+            call = ast.Expr(ast.Call(ast.Name(GUARD, ast.Load(), **loc), [], [], **loc), **loc)
+            node.body.insert(0, call)
+        return node
+
+
+def guarded(tree):
+    t = _Guarder().visit(tree)
+    ast.fix_missing_locations(t)
+    return t
 
 
 # ----------------------------------------------------------------------------- work folder
@@ -544,6 +594,8 @@ def err_info(exc, run):
             src = lines[ln - 1].strip() if 0 < ln <= len(lines) else ""
             tbl.append({"ln": ln, "fn": tb.tb_frame.f_code.co_name, "src": src})
         tb = tb.tb_next
+    if len(tbl) > TB_MAX:  # like Python's "[Previous line repeated N more times]"
+        tbl = tbl[:3] + [{"ln": 0, "fn": "", "src": "", "more": len(tbl) - 9}] + tbl[-6:]
     d = {"type": type(exc).__name__, "msg": str(exc), "line": line, "text": text, "tb": tbl}
     if isinstance(exc, SyntaxError):
         d["col"] = exc.offset
@@ -576,7 +628,7 @@ def prism_run(req_json):
         tree = ast.parse(run.code, USER)
         run.tree = tree
         run.info = line_info(run.code, tree)
-        code = compile(tree, USER, "exec")
+        code = compile(guarded(ast.parse(run.code, USER)), USER, "exec")
     except SyntaxError as e:
         result = {"ok": False, "error": err_info(e, run), "out": [], "steps": [], "info": {}, "files": read_work(), "inputs": []}
         return json.dumps(result)
@@ -585,6 +637,7 @@ def prism_run(req_json):
     run.ns = ns
     builtins.input = run._input
     builtins.open = run._open
+    setattr(builtins, GUARD, _guard)
     sys.stdout, sys.stderr = W("out"), W("err")
     sys.settrace(run.tracer)
     try:
@@ -604,6 +657,10 @@ def prism_run(req_json):
         sys.stdout, sys.stderr = old_out, old_err
         builtins.input = _real_input
         builtins.open = _real_open
+        try:
+            delattr(builtins, GUARD)
+        except AttributeError:
+            pass
         # close files the program forgot to close, like the real interpreter does at exit (but say so)
         unclosed = []
         for k, v in list(ns.items()):
@@ -622,6 +679,7 @@ def prism_run(req_json):
         "out": run.out,
         "steps": run.steps if run.trace else [],
         "truncated": run.truncated,
+        "outCut": run.out_cut,
         "count": run.count,
         "info": {str(k): v for k, v in run.info.items()} if run.trace else {},
         "files": read_work(),

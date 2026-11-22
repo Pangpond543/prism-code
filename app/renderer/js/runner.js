@@ -17,7 +17,11 @@ function spawn() {
       const w = waiting.get(m.id);
       if (!w) return;
       waiting.delete(m.id); clearTimeout(w.timer);
-      w.resolve(m.type === 'result' ? m.res : { ok: false, error: { type: 'Internal', msg: m.msg, line: null, tb: [] }, out: [], steps: [], files: {} });
+      // very deep recursion (after sys.setrecursionlimit) overflows WebAssembly's own stack: say it like Python would
+      const deep = m.type === 'fail' && /call stack|recursion/i.test(m.msg || '');
+      w.resolve(m.type === 'result' ? m.res : { ok: false, error: deep ? { type: 'RecursionError', msg: 'maximum recursion depth exceeded', text: 'RecursionError: maximum recursion depth exceeded', line: null, tb: [] } : { type: 'Internal', msg: m.msg, line: null, tb: [] }, out: [], steps: [], files: {} });
+      // Python itself broke (out of memory, stack overflow in WebAssembly…): every later run would fail too
+      if (m.type === 'fail') { try { worker.terminate(); } catch { /* */ } spawn(); }
     };
     worker.onerror = (e) => { pyInfo.error = String(e.message || e); bus.emit('py:fail', pyInfo.error); resolve(false); };
   });

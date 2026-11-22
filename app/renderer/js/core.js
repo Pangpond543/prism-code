@@ -26,7 +26,7 @@ export const recall = store;
 export const remember = (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } };
 
 /* -------------------------------------------------------------------- theme */
-export const theme = { dark: false, ink: '35,42,71', ink2: '74,83,118', paper: '255,255,255' };
+export const theme = { dark: false, classic: false, ink: '35,42,71', ink2: '74,83,118', paper: '255,255,255' };
 export function setTheme(dark) {
   Object.assign(theme, dark
     ? { dark: true, ink: '236,240,255', ink2: '176,186,226', paper: '14,18,40' }
@@ -36,6 +36,14 @@ export function setTheme(dark) {
   bus.emit('theme', dark);
 }
 export const savedTheme = () => store('prism.theme', 'light') === 'dark';
+// look: 'glass' (moving refractive background, frosted panels, spring motion) or 'classic' (flat, still, light on the PC)
+export function setLook(classic) {
+  theme.classic = classic;
+  document.documentElement.dataset.look = classic ? 'classic' : 'glass';
+  remember('prism.look', classic ? 'classic' : 'glass');
+  bus.emit('look', classic);
+}
+export const savedLook = () => store('prism.look', 'glass') === 'classic';
 
 /* ---------------------------------------------------------------------- bus */
 const listeners = new Map();
