@@ -1,5 +1,21 @@
 # Prism Code — changelog
 
+## 2026-11-26 — v1.6.0 released (keyboard sounds). Notes TH + EN in `docs/release-notes-1.6.0.md`; Setup + Portable from `tools/release.sh`.
+
+## 2026-11-24 — keyboard sounds ("เสียงคีย์บอร์ดเวลาพิมพ์ ให้เลือกได้หลากหลาย เหมือนจำลองสวิตช์คีย์บอร์ดต่างๆ")
+- New speaker button on the editor bar (`#btn-sound`) → menu: on / off, volume, 12 simulated switches (Blue, Box Jade,
+  Brown, Panda, Red, Black, Creamy, Silent, Topre, Buckling spring, Laptop, Typewriter), a box to try typing. Picking a
+  switch turns sound on and plays a short typing demo. Ctrl+Alt+M = quick on / off (toast). Off by default.
+- Why synthesised, not recorded: offline, no files, no licence questions. `js/keysound.js` renders each switch once
+  (~15–100 ms) into 6 takes × 4 key kinds (key / wide / Enter / Space) × press + release: click jacket, tactile bump,
+  bottom-out noise burst, keycap / case resonances, spring ping, stabiliser rattle on long keys; typewriter has its own
+  model (escapement, carriage return + bell on Enter).
+- Realism details: release sound on keyup, a held key repeats silently, never the same take twice in a row, slight
+  pitch + level variation, rows pitched a little differently, left keys pan left / right keys right, small desk reverb,
+  compressor so fast typing does not clip. The audio thread suspends 6 s after the last sound (idle CPU measured 0.8 %).
+- Verified in `appinprism-code.exe` (START log exe_mtime = build): menu screenshot, self-test renders all 12 switches,
+  real mouse pick + real key presses in the preview (5 keys → 5 press + 5 release sounds), Ctrl+Alt+M, TH / EN, dark.
+
 ## 2026-11-23 — "the app freezes, the whole window goes white, and the PC gets slow while it's open" (a friend's report)
 - 🔴 **White window**: v1.4.0 sent the whole step recording to the page in one go. Measured with the old tracer:
   infinite recursion = 75 MB, a 60×60 list changed in a loop = 220 MB (14 s). The page froze / ran out of memory

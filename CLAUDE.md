@@ -35,13 +35,14 @@ into `app/renderer/pyodide/`; npm packages live in `%USERPROFILE%\PrismCodeBuild
 - `js/lib.js` — Library (คลัง): folders + own .py files, Prism Cam-style drag into folders, search, save folder to PC. `js/rail.js` — name rail (from Prism Rec).
 - `js/packs.js` — BU Final (4 problems, hidden tests, answers, the user's first answers as find-the-bug).
 - `js/gen.js` — 4 templates × stories; `finalize()` replaces the sample with the answer's real output (see pitfalls).
+- `js/keysound.js` — keyboard sounds: 12 synthesised switches (`PACKS`), keydown / keyup listeners, menu in `app.js mountSoundMenu`.
 - `js/quiz.js` — predict-the-output snippets. `js/notebook.js` — .ipynb → pack. `js/errors.js` — Thai explanations.
 - State: `localStorage['prism.code.v1']` (docs, files per doc, generated problems, imported packs, progress, quiz score, UI).
 
 ## Test hooks
 `PRISM_ACT` (comma list): `en` `th` `dark` `light` `info` `view:library|quiz|keys|code` `open:bu1..bu4` `buggy:bu1` `sol`
 (answer into editor) `code:<urlencoded>` `run[:in1|in2]` `viz[:in1|in2]` `step:<n>` `goto:<i>` `pause` `check` `tab:viz|files|check`
-`gen:t1..t4|any` `openfile:<path>` `libtab:prob|files` `mkfolder:<name>` `mkfile:<name>[@folder]` `right:off` `libdel:<name>` (removes test folders / files by exact name — the exe shares the user's real data!) `wait:<ms>` `quit`. `PRISM_MULTI=1` skips single instance.
+`gen:t1..t4|any` `openfile:<path>` `libtab:prob|files` `mkfolder:<name>` `mkfile:<name>[@folder]` `right:off` `libdel:<name>` (removes test folders / files by exact name — the exe shares the user's real data!) `soundpop` `soundpick:<id>` `sound:on|off|demo|test|<id>` (test = log render times / peaks) `wait:<ms>` `quit`. `PRISM_MULTI=1` skips single instance.
 Browser preview of the page: `.claude/launch.json` → `prism-code-ui` (node `%USERPROFILE%\PrismCodeBuild\test\serve.mjs`),
 then `?act=…` in the URL and `window.__pc` (viz, ED, S, runTrace, runCheck, openProblem).
 Node tests (Pyodide in Node): `%USERPROFILE%\PrismCodeBuild\test\t1.mjs` (one program, prints steps), `t2.mjs` (BU Final

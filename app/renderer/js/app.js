@@ -17,6 +17,7 @@ import { makeQuiz, QUIZ_TOPICS } from './quiz.js';
 import { packFromNotebook, looksLikeNotebook } from './notebook.js';
 import { initLibrary, mountLibrary, refreshLibrary, libCount, flashRow, inLib, setPageRail, libKey } from './lib.js';
 import { createRail } from './rail.js';
+import { PACKS, TYPE_NAMES, sound, initKeySound, setSoundOn, setSoundPack, setSoundVol, demoSound, soundSelfTest } from './keysound.js';
 
 addEventListener('error', (e) => api.invoke('app:log', 'JS error: ' + e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno));
 addEventListener('unhandledrejection', (e) => api.invoke('app:log', 'JS rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
@@ -880,12 +881,66 @@ function quizToEditor(play) {
   if (play) runTrace({ play: true, interactive: true });
 }
 
+/* -------------------------------------------------------- keyboard sounds */
+// speaker button on the editor bar → menu: on / off, volume, which switch (pick = hear a short typing demo), a box to try it
+function syncSoundBtn() {
+  const b = $('btn-sound'); if (!b) return;
+  b.classList.toggle('on', sound.on);
+  b.classList.toggle('muted', !sound.on);
+  const p = PACKS.find((x) => x.id === sound.pack);
+  b.title = sound.on ? T`เสียงคีย์บอร์ด: ${p.name} — กดเพื่อเลือกเสียงอื่น (ปิด / เปิด: Ctrl+Alt+M)` : T`เสียงคีย์บอร์ด: ปิดอยู่ — กดเพื่อเลือกเสียงสวิตช์ (Ctrl+Alt+M)`;
+}
+function mountSoundMenu() {
+  const pop = $('sound-pop'), btn = $('btn-sound'), isOpen = () => !pop.classList.contains('hidden');
+  pop.innerHTML = `
+    <div class="ctx-head">${T`เสียงคีย์บอร์ดตอนพิมพ์`}</div>
+    <div class="seg" id="sp-onoff"><button data-on="0">${icon('x')}<span>${T`ปิดเสียง`}</span></button><button data-on="1">${icon('speaker')}<span>${T`เปิดเสียง`}</span></button></div>
+    <label class="sp-vol" title="${T`ความดัง`}">${icon('speaker')}<input type="range" id="sp-vol" min="0" max="100" step="1"><b id="sp-volv"></b></label>
+    <div class="ctx-head">${T`เลือกสวิตช์ (กดเพื่อลองฟัง)`}</div>
+    <div class="sp-list">${PACKS.map((p) => `<button class="sp-item" data-pack="${p.id}"><i class="sp-dot" style="--c:${p.color}"></i><span class="sp-txt"><b>${esc(p.name)}</b><small>${esc(T(p.desc))}</small></span><em class="sp-type t-${p.type}">${esc(T(TYPE_NAMES[p.type]))}</em></button>`).join('')}</div>
+    <input class="sp-try" id="sp-try" spellcheck="false" placeholder="${T`ลองพิมพ์ตรงนี้…`}">
+    <p class="theme-note">${T`เสียงสร้างขึ้นในโปรแกรมเอง ไม่ใช้ไฟล์และไม่ใช้เน็ต · ปิด / เปิดเร็วๆ: Ctrl+Alt+M`}</p>`;
+  const vol = pop.querySelector('#sp-vol'), volv = pop.querySelector('#sp-volv');
+  const sync = () => {
+    pop.querySelectorAll('#sp-onoff button').forEach((b) => b.classList.toggle('on', (b.dataset.on === '1') === sound.on));
+    pop.querySelectorAll('.sp-item').forEach((b) => b.classList.toggle('on', b.dataset.pack === sound.pack));
+    pop.classList.toggle('off', !sound.on);
+    vol.value = Math.round(sound.vol * 100); volv.textContent = vol.value + '%';
+    vol.style.setProperty('--v', vol.value + '%');
+    syncSoundBtn();
+  };
+  const place = () => {
+    const r = btn.getBoundingClientRect(), w = pop.offsetWidth;
+    pop.style.left = Math.max(8, Math.min(r.right - w + 8, innerWidth - w - 8)) + 'px';
+    pop.style.top = r.bottom + 10 + 'px';
+    pop.style.maxHeight = Math.max(220, innerHeight - r.bottom - 22) + 'px';
+  };
+  const close = () => { pop.classList.add('hidden'); btn.classList.remove('open'); };
+  btn.onclick = () => { if (isOpen()) { close(); return; } hideCtx(); sync(); pop.classList.remove('hidden'); btn.classList.add('open'); place(); };
+  pop.querySelectorAll('#sp-onoff button').forEach((b) => { b.onclick = () => { const on = b.dataset.on === '1'; setSoundOn(on); sync(); if (on) demoSound(); }; });
+  pop.querySelectorAll('.sp-item').forEach((b) => {
+    b.onclick = () => { if (!sound.on) setSoundOn(true); setSoundPack(b.dataset.pack); sync(); demoSound(); }; // picking a switch = you want to hear it
+  });
+  vol.oninput = () => { setSoundVol(vol.value / 100); if (!sound.on) setSoundOn(true); sync(); };
+  vol.onchange = () => demoSound();
+  addEventListener('pointerdown', (e) => { if (isOpen() && !pop.contains(e.target) && !btn.contains(e.target)) close(); }, true);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) { e.stopPropagation(); close(); } }, true);
+  addEventListener('resize', () => { if (isOpen()) place(); });
+  bus.on('keysound', () => { if (isOpen()) sync(); else syncSoundBtn(); });
+  syncSoundBtn();
+}
+function toggleSound() {
+  setSoundOn(!sound.on);
+  const p = PACKS.find((x) => x.id === sound.pack);
+  toast(sound.on ? T`เสียงคีย์บอร์ด: เปิด (${p.name})` : T`เสียงคีย์บอร์ด: ปิด`);
+}
+
 /* -------------------------------------------------------------- shortcuts */
 const KEYS = [
   ['รันโปรแกรม', 'F5'], ['รันแล้วดูการทำงานทีละขั้น', 'F6'], ['หยุดโปรแกรม', 'Shift+F5'], ['ตรวจคำตอบ', 'Ctrl+Enter'],
   ['ภาพทีละขั้น: ขั้นถัดไป', 'F10'], ['ภาพทีละขั้น: ย้อนกลับ', 'Shift+F10'], ['ภาพทีละขั้น: เล่น / หยุด', 'F7'], ['ภาพทีละขั้น: ไปต้น / ท้าย', 'Home / End'],
   ['บันทึกเป็นไฟล์ .py', 'Ctrl+S'], ['เปิดไฟล์ .py / .ipynb', 'Ctrl+O'], ['เอกสารใหม่', 'Ctrl+N'], ['ปิดแท็บ', 'Ctrl+W'], ['สลับแท็บ', 'Ctrl+Tab'],
-  ['ซ่อน / แสดงโจทย์', 'Ctrl+B'], ['ซ่อน / แสดงแผงสรุปค่าด้านขวา', 'Ctrl+J'], ['เปิดคลังไฟล์ (แผงขวา)', 'Ctrl+Shift+E'], ['คลัง: เลือกหลายไฟล์', 'Ctrl+คลิก / Shift+คลิก / ลากคลุม'], ['คลัง: เลือกทั้งหมด / ลบ / เปลี่ยนชื่อ', 'Ctrl+A / Delete / F2'], ['คลัง: ย้อนกลับ / ทำซ้ำ', 'Ctrl+Z / Ctrl+Y'], ['ชี้ตัวแปรในโค้ด = ดูค่าทั้งหมดที่เคยเป็น', 'เมาส์'], ['ขยายช่องเขียนโค้ดเต็ม', 'Ctrl+Alt+B'], ['ตัวอักษรใหญ่ / เล็ก / ปกติ', 'Ctrl+= / Ctrl+- / Ctrl+0'], ['หน้าคีย์ลัด', 'F1'],
+  ['ซ่อน / แสดงโจทย์', 'Ctrl+B'], ['ซ่อน / แสดงแผงสรุปค่าด้านขวา', 'Ctrl+J'], ['เปิดคลังไฟล์ (แผงขวา)', 'Ctrl+Shift+E'], ['คลัง: เลือกหลายไฟล์', 'Ctrl+คลิก / Shift+คลิก / ลากคลุม'], ['คลัง: เลือกทั้งหมด / ลบ / เปลี่ยนชื่อ', 'Ctrl+A / Delete / F2'], ['คลัง: ย้อนกลับ / ทำซ้ำ', 'Ctrl+Z / Ctrl+Y'], ['ชี้ตัวแปรในโค้ด = ดูค่าทั้งหมดที่เคยเป็น', 'เมาส์'], ['ขยายช่องเขียนโค้ดเต็ม', 'Ctrl+Alt+B'], ['เสียงคีย์บอร์ด: ปิด / เปิด', 'Ctrl+Alt+M'], ['ตัวอักษรใหญ่ / เล็ก / ปกติ', 'Ctrl+= / Ctrl+- / Ctrl+0'], ['หน้าคีย์ลัด', 'F1'],
 ];
 const EDKEYS = [
   ['คอมเมนต์ / ยกเลิกคอมเมนต์', 'Ctrl+/'], ['ย่อหน้า / ถอยย่อหน้า', 'Tab / Shift+Tab'], ['ย้อนกลับ / ทำซ้ำ', 'Ctrl+Z / Ctrl+Y'], ['ค้นหา / แทนที่', 'Ctrl+F / Ctrl+H'],
@@ -990,6 +1045,7 @@ function onKey(e) {
     return;
   }
   if (ctrl && !e.altKey && k.toLowerCase() === 'j') { e.preventDefault(); setRight(S.ui.noright); return; }
+  if (ctrl && e.altKey && e.code === 'KeyM') { e.preventDefault(); toggleSound(); return; }
   if (ctrl && e.altKey && k.toLowerCase() === 'b') { e.preventDefault(); setFocusMode(!S.ui.focus); return; }
   if (ctrl && k.toLowerCase() === 'b') { e.preventDefault(); if (S.ui.focus) setFocusMode(false); setProb(S.ui.noprob); return; }
   if (ctrl && (k === '=' || k === '+')) { e.preventDefault(); setFont(S.ui.fontSize + 1); return; }
@@ -1037,6 +1093,8 @@ async function boot() {
     addEventListener('resize', () => { if (isOpen()) place(); }); // snap / maximise: follow the button
   }
   themeIcon();
+  initKeySound();
+  mountSoundMenu();
   const ls = $('lang-switch');
   ls.dataset.lang = lang;
   ls.querySelectorAll('button').forEach((b) => {
@@ -1143,7 +1201,7 @@ async function boot() {
   setRTab(['check', 'files', 'lib'].includes(S.ui.rtab) ? S.ui.rtab : 'viz');
   try { const v = localStorage.getItem('prism.view'); if (v && $('view-' + v)) showView(v); } catch { /* */ }
   updateVizBar();
-  if (!native) window.__pc = { viz, ED, S, runTrace, runCheck, openProblem }; // browser dev preview only
+  if (!native) window.__pc = { viz, ED, S, runTrace, runCheck, openProblem, sound, soundSelfTest, demoSound }; // browser dev preview only
   api.invoke('app:ready');
 
   // files given on the command line ("Open with")
@@ -1154,18 +1212,21 @@ async function boot() {
   // self-test hook: PRISM_ACT=en,dark,info,view:library,open:bu1,buggy:bu1,viz,run,check,quiz,gen:t3,wait:<ms>,step:<n>,quit …
   const acts = String((await api.invoke('about:info')).test || (!native && new URLSearchParams(location.search).get('act')) || '').split(',').filter(Boolean);
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const press = (el) => { el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); el.click(); };
   for (const a of acts) {
     const [cmd, arg] = [a.split(':')[0], a.split(':').slice(1).join(':')];
     api.invoke('app:log', 'test act ' + a);
     if (cmd === 'en' || cmd === 'th') { if (lang !== cmd) { remember('prism.lang', cmd); location.reload(); return; } }
     else if (cmd === 'dark' || cmd === 'light') { setTheme(cmd === 'dark'); themeIcon(); }
     else if (cmd === 'themepop' || cmd === 'classic' || cmd === 'glass') { // full press sequence, so the close-on-outside-press listener runs too
-      const press = (el) => { el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); el.click(); };
       if (cmd === 'themepop') press($('btn-theme'));
       else if (!$('theme-pop').classList.contains('hidden')) press(document.querySelector(`#theme-pop [data-look=${cmd}]`));
       else setLook(cmd === 'classic');
     }
     else if (cmd === 'info') showInfo();
+    else if (cmd === 'soundpop') press($('btn-sound'));
+    else if (cmd === 'soundpick') press(document.querySelector(`#sound-pop [data-pack=${arg}]`));
+    else if (cmd === 'sound') { if (arg === 'on' || arg === 'off') setSoundOn(arg === 'on'); else if (arg === 'demo') demoSound(); else if (arg === 'test') api.invoke('app:log', 'keysound ' + JSON.stringify(soundSelfTest())); else { setSoundOn(true); setSoundPack(arg); } }
     else if (cmd === 'updfake') window.__prismUpdFake = true;
     else if (cmd === 'view') showView(arg);
     else if (cmd === 'open') openProblem(BU_FINAL.id, arg);

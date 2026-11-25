@@ -34,6 +34,11 @@
 - **Files tab** — the folder `open()` sees: problem data files, files the program wrote (they stay, like a real disk),
   new / edit / rename / delete / import from PC / save to PC / reset to the problem's files.
 - Open .py (also loads the .txt files from the same folder), save as .py (Ctrl+S), drag & drop .py / .ipynb / .txt.
+- **Keyboard sounds** (speaker button on the editor bar, Ctrl+Alt+M on / off): 12 simulated switches — clicky
+  (Blue, Box Jade, Buckling spring), tactile (Brown, Panda, Topre), linear (Red, Black, Creamy, Silent), other (Laptop,
+  Typewriter: Enter rings the bell). Click a switch = hear a demo. Volume slider, try-typing box. Press + release sounds,
+  different Space / Enter / Backspace, stereo by key position, every press slightly different. Synthesised in the app
+  (no files, offline); remembered in `localStorage['prism.code.keysound']`. Off by default.
 
 ## Library (คลัง)
 - Every .py opened / dropped from the PC and every document written in the app (not problems) — `lib.js`, data
